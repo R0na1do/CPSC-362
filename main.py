@@ -1,21 +1,17 @@
+"""Start the Graffiti Grid web application."""
+
 from nicegui import ui
 
+from game_screen import show_game
 
+
+# Build a separate game screen for each page visit.
 @ui.page("/")
 def home():
-    ui.dark_mode().enable()
-
-    with ui.column().classes("w-full items-center gap-4"):
-        ui.label("GRAFFITI GRID").classes(
-            "text-5xl font-bold text-yellow-400"
-        )
-        ui.label("Our Python game project is running!")
-        ui.button(
-            "Test Button",
-            on_click=lambda: ui.notify("NiceGUI is working!"),
-        )
+    show_game()
 
 
+# Run the application locally on this computer.
 if __name__ == "__main__":
     ui.run(
         title="Graffiti Grid",
