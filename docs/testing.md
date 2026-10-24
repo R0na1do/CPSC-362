@@ -74,7 +74,7 @@ and the board, turn, and result remain unchanged.
 ## Limits and manual checks
 
 These tests verify the Python engine, not browser behavior or deployment.
-They do not run automatically in the current GitHub workflow.
+The Classic engine tests workflow runs these tests on GitHub for pushes and pull requests. View results in the repository's Actions tab.
 
 For a manual interface check, install the project dependencies and run
 `python main.py`. Visit `http://127.0.0.1:8080`, start Classic with different
