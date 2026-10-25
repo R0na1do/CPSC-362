@@ -17,6 +17,10 @@ class ClassicGame:
 
     def __init__(self) -> None:
         """Create a game and initialize its board."""
+        self.board: list[str] = [""] * 9
+        self.current_player: str = "X"
+        self.winner: str | None = None
+        self.is_draw: bool = False
         self.reset()
 
     def reset(self) -> None:

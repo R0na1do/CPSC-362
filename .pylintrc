@@ -4,3 +4,7 @@ py-version = 3.12
 [TYPECHECK]
 # NiceGUI is declared in requirements.txt; the lint container need not install it.
 ignored-modules = nicegui
+
+[MESSAGES CONTROL]
+# Follow the import order required by Super-Linter's isort validation.
+disable = wrong-import-order

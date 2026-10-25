@@ -1,7 +1,6 @@
 """Check Classic rules without starting the web application."""
 
 import unittest
-
 from game_engine import ClassicGame
 
 

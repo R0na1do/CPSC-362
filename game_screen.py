@@ -1,10 +1,9 @@
 """Menus, player setup, and the local Classic game screen."""
 
 from functools import partial
-
-from nicegui import ui
-
 from game_engine import ClassicGame
+from nicegui import ui
+from typing import Any
 
 # Keep the arcade styling together so screen logic stays easy to scan.
 PAGE_CSS = """
@@ -98,8 +97,8 @@ class ClassicGameScreen:
     def __init__(self) -> None:
         """Initialize game state, shared display names, and the page shell."""
         self.game = ClassicGame()
-        self.names = {"X": "Player 1", "O": "Player 2"}
-        self.controls = {}
+        self.names: dict[str, str] = {"X": "Player 1", "O": "Player 2"}
+        self.controls: dict[str, Any] = {}
 
         ui.dark_mode().enable()
         ui.add_css(PAGE_CSS)
@@ -356,7 +355,11 @@ class ClassicGameScreen:
 
     def _show_winner(self, status) -> None:
         """Set the winner name and trophy message."""
-        winner = self.names[self.game.winner]
+        winner_piece = self.game.winner
+        if winner_piece is None:
+            return
+
+        winner = self.names[winner_piece]
         status.set_text(f"{winner} wins!")
         self.controls["result_icon"].set_text("🏆")
         self.controls["result_title"].set_text(f"{winner} takes the crown!")
