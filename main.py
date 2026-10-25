@@ -8,6 +8,7 @@ from game_screen import show_game
 # Build a separate game screen for each page visit.
 @ui.page("/")
 def home():
+    """Render the local game for the current browser session."""
     show_game()
 
 

@@ -6,7 +6,7 @@ Build a browser-based tic-tac-toe game where two players can
 compete through private rooms or matchmaking.
 
 Development will use Python, NiceGUI, Supabase, GitHub,
-and VS Code. Hosting will be selected after local testing.
+and Visual Studio Code. Hosting will be selected after local testing.
 
 This document describes planned features, not completed work.
 

@@ -6,8 +6,7 @@ from nicegui import ui
 
 from game_engine import ClassicGame
 
-
-# Shared appearance for this page.
+# Keep the arcade styling together so screen logic stays easy to scan.
 PAGE_CSS = """
 body {
     background: radial-gradient(circle at top, #243253, #090e1a 65%);
@@ -93,287 +92,296 @@ body {
 """
 
 
-def show_game():
-    """Create independent game state for each page visit."""
-    game = ClassicGame()
-    names = {"X": "Player 1", "O": "Player 2"}
+class ClassicGameScreen:
+    """Build and manage one browser session's local Classic game."""
 
-    ui.dark_mode().enable()
-    ui.add_css(PAGE_CSS)
+    def __init__(self) -> None:
+        """Initialize game state, shared display names, and the page shell."""
+        self.game = ClassicGame()
+        self.names = {"X": "Player 1", "O": "Player 2"}
+        self.controls = {}
 
-    with ui.column().classes("arcade-shell items-center gap-5"):
-        ui.label("GRAFFITI GRID").classes("arcade-title")
-        ui.label("YOUR MOVE. YOUR MOMENT.").classes(
-            "text-sm tracking-widest text-gray-400 text-center"
-        )
-        content = ui.column().classes("w-full items-center gap-5")
+        ui.dark_mode().enable()
+        ui.add_css(PAGE_CSS)
+        self._build_shell()
+        self.show_menu()
 
-    def clear_screen():
-        """Replace the current screen without losing player names."""
-        content.clear()
+    def _build_shell(self) -> None:
+        """Create the persistent title and screen-content container."""
+        with ui.column().classes("arcade-shell items-center gap-5"):
+            ui.label("GRAFFITI GRID").classes("arcade-title")
+            ui.label("YOUR MOVE. YOUR MOMENT.").classes(
+                "text-sm tracking-widest text-gray-400 text-center"
+            )
+            self.content = ui.column().classes("w-full items-center gap-5")
 
-    # Main menu.
-    def show_menu():
-        clear_screen()
+    def _clear_screen(self) -> None:
+        """Clear screen-specific controls before drawing another screen."""
+        self.content.clear()
+        self.controls.clear()
 
-        with content:
+    def show_menu(self) -> None:
+        """Display available modes and links to the game instructions."""
+        self._clear_screen()
+
+        with self.content:
             with ui.column().classes("arcade-panel items-center gap-4"):
-                ui.label("Choose your game").classes(
-                    "text-2xl font-bold"
+                ui.label("Choose your game").classes("text-2xl font-bold")
+                ui.label("Challenge a friend on the same screen.").classes(
+                    "text-gray-300 text-center"
                 )
-                ui.label(
-                    "Challenge a friend on the same screen."
-                ).classes("text-gray-300 text-center")
-
                 ui.button(
                     "PLAY CLASSIC",
-                    on_click=show_setup,
+                    on_click=self.show_setup,
                     color="cyan-8",
                 ).classes("w-full").props("size=lg")
-
-                ui.label(
-                    "Classic: three in a row wins. No turn timer."
-                ).classes("text-sm text-gray-400 text-center")
-
-                ui.button(
-                    "BLITZ · COMING NEXT",
-                    color="grey-8",
-                ).classes("w-full").disable()
-
+                ui.label("Classic: three in a row wins. No turn timer.").classes(
+                    "text-sm text-gray-400 text-center"
+                )
+                ui.button("BLITZ · COMING NEXT", color="grey-8").classes(
+                    "w-full"
+                ).disable()
                 ui.label(
                     "Blitz: keep up to three pieces. "
                     "Your fourth placement removes your oldest."
                 ).classes("text-sm text-gray-400 text-center")
+                ui.button("How to play", on_click=self.show_rules).props("flat")
 
-                ui.button(
-                    "How to play",
-                    on_click=show_rules,
-                ).props("flat")
+            ui.label("Local play available now · Online rooms coming later").classes(
+                "text-sm text-gray-400 text-center"
+            )
 
-            ui.label(
-                "Local play available now · Online rooms coming later"
-            ).classes("text-sm text-gray-400 text-center")
+    def show_rules(self) -> None:
+        """Show the playable Classic rules in short, numbered steps."""
+        self._clear_screen()
 
-    # Instructions.
-    def show_rules():
-        clear_screen()
-
-        with content:
+        with self.content:
             with ui.column().classes("arcade-panel gap-4"):
-                ui.label("How to play Classic").classes(
-                    "text-2xl font-bold"
-                )
-                for rule in (
+                ui.label("How to play Classic").classes("text-2xl font-bold")
+                rules = (
                     "1. Enter a different name for each player.",
                     "2. Player X goes first.",
                     "3. Take turns choosing an empty square.",
                     "4. Get three in a row, column, or diagonal to win.",
                     "5. A full board with no winner is a draw.",
-                ):
+                )
+                for rule in rules:
                     ui.label(rule).classes("text-gray-300")
+                ui.button("Back to menu", on_click=self.show_menu)
 
-                ui.button("Back to menu", on_click=show_menu)
+    def show_setup(self) -> None:
+        """Ask both local players for display names before a round."""
+        self._clear_screen()
 
-    # Player names are display names, not account credentials.
-    def show_setup():
-        clear_screen()
-
-        with content:
+        with self.content:
             with ui.column().classes("arcade-panel gap-4"):
-                ui.label("Meet the players").classes(
-                    "text-2xl font-bold"
+                ui.label("Meet the players").classes("text-2xl font-bold")
+                ui.label("Classic · Same-screen play").classes("text-gray-400")
+                name_x = (
+                    ui.input("Player X name", value=self.names["X"])
+                    .classes("w-full")
+                    .props("maxlength=20 outlined")
                 )
-                ui.label("Classic · Same-screen play").classes(
-                    "text-gray-400"
+                name_o = (
+                    ui.input("Player O name", value=self.names["O"])
+                    .classes("w-full")
+                    .props("maxlength=20 outlined")
                 )
-
-                name_x = ui.input(
-                    "Player X name", value=names["X"]
-                ).classes("w-full").props("maxlength=20 outlined")
-
-                name_o = ui.input(
-                    "Player O name", value=names["O"]
-                ).classes("w-full").props("maxlength=20 outlined")
-
                 error = ui.label().classes("text-red-300")
                 error.props('role="alert"')
-
-                def start_game():
-                    # Validate names before changing game state.
-                    first = (name_x.value or "").strip()
-                    second = (name_o.value or "").strip()
-
-                    if not first or not second:
-                        error.set_text("Enter a name for both players.")
-                        return
-
-                    if len(first) > 20 or len(second) > 20:
-                        error.set_text("Use 20 characters or fewer.")
-                        return
-
-                    if first.casefold() == second.casefold():
-                        error.set_text(
-                            "Use different names so players are clear."
-                        )
-                        return
-
-                    names.update({"X": first, "O": second})
-                    game.reset()
-                    show_board()
-
                 ui.button(
                     "START MATCH",
-                    on_click=start_game,
+                    on_click=lambda: self.start_match(name_x, name_o, error),
                     color="cyan-8",
                 ).classes("w-full").props("size=lg")
+                ui.button("Back to menu", on_click=self.show_menu).props("flat")
 
-                ui.button(
-                    "Back to menu", on_click=show_menu
-                ).props("flat")
+    def start_match(self, name_x, name_o, error) -> None:
+        """Validate player names, then start a fresh local round."""
+        first = (name_x.value or "").strip()
+        second = (name_o.value or "").strip()
 
-    # Board and result display.
-    def show_board():
-        clear_screen()
-        buttons = []
+        if not first or not second:
+            error.set_text("Enter a name for both players.")
+            return
+        if len(first) > 20 or len(second) > 20:
+            error.set_text("Use 20 characters or fewer.")
+            return
+        if first.casefold() == second.casefold():
+            error.set_text("Choose different names so players are clear.")
+            return
 
-        def play_move(position):
-            accepted, message = game.make_move(position)
-            if not accepted:
-                ui.notify(message, type="warning")
-                return
-            refresh_board()
+        self.names.update({"X": first, "O": second})
+        self.game.reset()
+        self.show_board()
 
-        def play_again():
-            game.reset()
-            show_board()
+    def show_board(self) -> None:
+        """Build the board, round status, result panel, and leave controls."""
+        self._clear_screen()
+        self.controls["buttons"] = []
 
-        def refresh_board():
-            winning_positions = set()
-
-            if game.winner:
-                for line in game.WINNING_LINES:
-                    if all(
-                        game.board[index] == game.winner
-                        for index in line
-                    ):
-                        winning_positions.update(line)
-
-            for position, button in enumerate(buttons):
-                piece = game.board[position]
-                button.set_text(piece)
-                button.set_enabled(
-                    not game.finished and piece == ""
-                )
-                button.classes(
-                    remove="piece-x piece-o winning-cell"
-                )
-
-                if piece:
-                    button.classes(f"piece-{piece.lower()}")
-                if position in winning_positions:
-                    button.classes("winning-cell")
-
-                row, column = divmod(position, 3)
-                button.props(
-                    f'aria-label="Row {row + 1}, '
-                    f'column {column + 1}"'
-                )
-                # Set text through NiceGUI instead of HTML interpolation.
-                button.set_text(piece)
-
-            if game.winner:
-                winner = names[game.winner]
-                status.set_text(f"{winner} wins!")
-                result_icon.set_text("🏆")
-                result_title.set_text(f"{winner} takes the crown!")
-                result_detail.set_text("Three in a row. Well played.")
-            elif game.is_draw:
-                status.set_text("It's a draw!")
-                result_icon.set_text("🤝")
-                result_title.set_text("An even match")
-                result_detail.set_text(
-                    "The board is full. Ready for another round?"
-                )
-            else:
-                player = game.current_player
-                status.set_text(f"{names[player]}'s turn · {player}")
-
-            result.set_visibility(game.finished)
-            leave_button.set_visibility(not game.finished)
-            leave_confirmation.set_visibility(False)
-
-        with content:
-            ui.label("CLASSIC · LOCAL MATCH").classes(
-                "text-sm text-gray-400"
+        with self.content:
+            self._build_player_labels()
+            self._build_game_board()
+            self._build_result_panel()
+            self._build_leave_controls()
+            ui.label("Names last until refresh. X starts each local round.").classes(
+                "text-sm text-gray-400 text-center"
             )
 
-            with ui.row().classes("w-full justify-between gap-3"):
-                ui.label(f"X · {names['X']}").classes(
-                    "text-cyan-300 font-bold break-all"
-                )
-                ui.label(f"O · {names['O']}").classes(
-                    "text-pink-300 font-bold break-all"
-                )
+        self.refresh_board()
 
-            status = ui.label().classes(
+    def _build_player_labels(self) -> None:
+        """Show player names and the live turn status."""
+        ui.label("CLASSIC · LOCAL MATCH").classes("text-sm text-gray-400")
+        with ui.row().classes("w-full justify-between gap-3"):
+            ui.label(f"X · {self.names['X']}").classes(
+                "text-cyan-300 font-bold break-all"
+            )
+            ui.label(f"O · {self.names['O']}").classes(
+                "text-pink-300 font-bold break-all"
+            )
+        self.controls["status"] = ui.label().classes(
+            "text-2xl font-bold text-center break-all"
+        )
+        self.controls["status"].props('role="status" aria-live="polite"')
+
+    def _build_game_board(self) -> None:
+        """Create nine accessible buttons for the game board."""
+        with ui.element("div").classes("game-board"):
+            for position in range(9):
+                button = ui.button(
+                    "",
+                    on_click=partial(self.play_move, position),
+                    color=None,
+                ).classes("game-cell")
+                self.controls["buttons"].append(button)
+
+    def _build_result_panel(self) -> None:
+        """Create the hidden trophy or draw panel and replay actions."""
+        with ui.column().classes("arcade-panel items-center gap-3") as result:
+            self.controls["result"] = result
+            self.controls["result_icon"] = ui.label().classes("victory-icon")
+            self.controls["result_title"] = ui.label().classes(
                 "text-2xl font-bold text-center break-all"
             )
-            status.props('role="status" aria-live="polite"')
+            self.controls["result_detail"] = ui.label().classes(
+                "text-gray-300 text-center"
+            )
+            ui.button("PLAY AGAIN", on_click=self.play_again, color="cyan-8").classes(
+                "w-full"
+            )
+            ui.button("Main menu", on_click=self.show_menu).props("flat")
 
-            with ui.element("div").classes("game-board"):
-                for position in range(9):
-                    button = ui.button(
-                        "",
-                        on_click=partial(play_move, position),
-                        color=None,
-                    ).classes("game-cell")
-                    buttons.append(button)
-
-            # Show the trophy only after a finished round.
-            with ui.column().classes(
-                "arcade-panel items-center gap-3"
-            ) as result:
-                result_icon = ui.label().classes("victory-icon")
-                result_title = ui.label().classes(
-                    "text-2xl font-bold text-center break-all"
+    def _build_leave_controls(self) -> None:
+        """Build a confirmation panel before abandoning a live round."""
+        self.controls["leave_button"] = ui.button(
+            "Leave round", on_click=self.show_leave_confirmation
+        ).props("flat")
+        with ui.column().classes("arcade-panel items-center gap-3") as confirmation:
+            self.controls["leave_confirmation"] = confirmation
+            ui.label("Leave this round? Your board will be discarded.").classes(
+                "text-center"
+            )
+            with ui.row():
+                ui.button("Leave", on_click=self.show_menu)
+                ui.button("Keep playing", on_click=self.hide_leave_confirmation).props(
+                    "flat"
                 )
-                result_detail = ui.label().classes(
-                    "text-gray-300 text-center"
-                )
-                ui.button(
-                    "PLAY AGAIN",
-                    on_click=play_again,
-                    color="cyan-8",
-                ).classes("w-full")
-                ui.button(
-                    "Main menu", on_click=show_menu
-                ).props("flat")
 
-            # Confirm before leaving an unfinished round.
-            leave_button = ui.button(
-                "Leave round",
-                on_click=lambda: leave_confirmation.set_visibility(True),
-            ).props("flat")
+    def play_move(self, position: int) -> None:
+        """Apply one move and refresh the board if the move is valid."""
+        accepted, message = self.game.make_move(position)
+        if not accepted:
+            ui.notify(message, type="warning")
+            return
+        self.refresh_board()
 
-            with ui.column().classes(
-                "arcade-panel items-center gap-3"
-            ) as leave_confirmation:
-                ui.label(
-                    "Leave this round? Your board will be discarded."
-                ).classes("text-center")
-                with ui.row():
-                    ui.button("Leave", on_click=show_menu)
-                    ui.button(
-                        "Keep playing",
-                        on_click=lambda: (
-                            leave_confirmation.set_visibility(False)
-                        ),
-                    ).props("flat")
+    def play_again(self) -> None:
+        """Reset the current names and show a fresh round."""
+        self.game.reset()
+        self.show_board()
 
-            ui.label(
-                "Names last until refresh. X starts each local round."
-            ).classes("text-sm text-gray-400 text-center")
+    def _winning_positions(self) -> set[int]:
+        """Return the winning cells to highlight, or an empty set."""
+        if not self.game.winner:
+            return set()
+        for line in self.game.WINNING_LINES:
+            if all(self.game.board[index] == self.game.winner for index in line):
+                return set(line)
+        return set()
 
-        refresh_board()
+    def refresh_board(self) -> None:
+        """Update cell marks, accessibility labels, turn, and result panel."""
+        winning_positions = self._winning_positions()
+        buttons = self.controls["buttons"]
 
-    show_menu()
+        for position, button in enumerate(buttons):
+            self._update_cell(button, position, winning_positions)
+
+        self._update_status_and_result()
+
+    def _update_cell(self, button, position: int, winning_positions: set[int]) -> None:
+        """Set one cell's mark, enabled state, styling, and accessible label."""
+        piece = self.game.board[position]
+        button.set_text(piece)
+        button.set_enabled(not self.game.finished and not piece)
+        button.classes(remove="piece-x piece-o winning-cell")
+
+        if piece:
+            button.classes(f"piece-{piece.lower()}")
+        if position in winning_positions:
+            button.classes("winning-cell")
+
+        row, column = divmod(position, 3)
+        occupant = piece or "empty"
+        button.props(f'aria-label="Row {row + 1}, column {column + 1}: {occupant}"')
+
+    def _update_status_and_result(self) -> None:
+        """Display the current turn or the completed-round result."""
+        status = self.controls["status"]
+        result_finished = self.controls["result"]
+
+        if self.game.winner:
+            self._show_winner(status)
+        elif self.game.is_draw:
+            self._show_draw(status)
+        else:
+            player = self.game.current_player
+            status.set_text(f"{self.names[player]}'s turn · {player}")
+
+        result_finished.set_visibility(self.game.finished)
+        self.controls["leave_button"].set_visibility(not self.game.finished)
+        self.hide_leave_confirmation()
+
+    def _show_winner(self, status) -> None:
+        """Set the winner name and trophy message."""
+        winner = self.names[self.game.winner]
+        status.set_text(f"{winner} wins!")
+        self.controls["result_icon"].set_text("🏆")
+        self.controls["result_title"].set_text(f"{winner} takes the crown!")
+        self.controls["result_detail"].set_text("Three in a row. Well played.")
+
+    def _show_draw(self, status) -> None:
+        """Set the draw message and rematch prompt."""
+        status.set_text("It's a draw!")
+        self.controls["result_icon"].set_text("🤝")
+        self.controls["result_title"].set_text("An even match")
+        self.controls["result_detail"].set_text(
+            "The board is full. Ready for another round?"
+        )
+
+    def show_leave_confirmation(self) -> None:
+        """Show the leave-round confirmation panel."""
+        self.controls["leave_confirmation"].set_visibility(True)
+
+    def hide_leave_confirmation(self) -> None:
+        """Hide the leave-round confirmation panel."""
+        confirmation = self.controls.get("leave_confirmation")
+        if confirmation:
+            confirmation.set_visibility(False)
+
+
+def show_game() -> None:
+    """Create one independent local Classic game for the current page."""
+    ClassicGameScreen()
