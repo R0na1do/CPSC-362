@@ -472,12 +472,13 @@ class ClassicGameScreen:
             ui.label("X starts · local round · no account needed").classes(
                 "text-xs text-gray-500 text-center tracking-widest"
             )
-
-        self.refresh_board()
-        if self.mode == "Blitz" and self.clock_state["duration"]:
-            self._start_turn_clock()
-            self.controls["clock_task"] = ui.timer(0.2, self._tick_turn_clock)
-            self._tick_turn_clock()
+            self.refresh_board()
+            if self.mode == "Blitz" and self.clock_state["duration"]:
+                self._start_turn_clock()
+                self.controls["clock_task"] = ui.timer(
+                    0.2, self._tick_turn_clock
+                )
+                self._tick_turn_clock()
 
     def _build_player_labels(self) -> None:
         """Show player names and the live turn status."""
