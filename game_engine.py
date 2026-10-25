@@ -70,3 +70,126 @@ class ClassicGame:
             all(self.board[index] == player for index in line)
             for line in self.WINNING_LINES
         )
+
+
+class BlitzGame(ClassicGame):
+    """Run Blitz rules while preserving each player's piece placement order."""
+
+    MAX_ACTIVE_PIECES = 3
+    MAX_ACTIONS = 100
+    REPETITIONS_FOR_DRAW = 3
+
+    def __init__(self) -> None:
+        """Create a fresh Blitz round and its repetition history."""
+        self.piece_order: dict[str, list[int]] = {"X": [], "O": []}
+        self.action_count = 0
+        self.draw_reason: str | None = None
+        self._state_occurrences: dict[
+            tuple[tuple[str, ...], str, tuple[int, ...], tuple[int, ...]], int
+        ] = {}
+        super().__init__()
+
+    @property
+    def oldest_cells(self) -> set[int]:
+        """Return each player's oldest active cell for UI highlighting."""
+        return {queue[0] for queue in self.piece_order.values() if queue}
+
+    def reset(self) -> None:
+        """Start a new Blitz round and clear its queues and draw history."""
+        super().reset()
+        self.piece_order = {"X": [], "O": []}
+        self.action_count = 0
+        self.draw_reason = None
+        self._state_occurrences = {}
+        self._record_current_state()
+
+    def make_move(self, cell: object) -> tuple[bool, str]:
+        """Apply a legal placement, rotating out a player's oldest mark."""
+        if self.finished:
+            return False, "The game has already ended."
+        if (
+            not isinstance(cell, int)
+            or isinstance(cell, bool)
+            or not 0 <= cell < len(self.board)
+        ):
+            return False, "Choose a valid square."
+        if self.board[cell]:
+            return False, "That square is already occupied."
+
+        player = self.current_player
+        queue = self.piece_order[player]
+        if len(queue) == self.MAX_ACTIVE_PIECES:
+            oldest_cell = queue.pop(0)
+            self.board[oldest_cell] = ""
+
+        self.board[cell] = player
+        queue.append(cell)
+        self.action_count += 1
+
+        # A win takes priority over both repetition and the action limit.
+        if self._has_winning_line(player):
+            self.winner = player
+            message = f"{player} wins!"
+        else:
+            self.current_player = "O" if player == "X" else "X"
+            state = self._state_key()
+            self._state_occurrences[state] = self._state_occurrences.get(state, 0) + 1
+
+            if self._state_occurrences[state] >= self.REPETITIONS_FOR_DRAW:
+                self.is_draw = True
+                self.draw_reason = "repetition"
+            elif self.action_count >= self.MAX_ACTIONS:
+                self.is_draw = True
+                self.draw_reason = "action_limit"
+
+            if (
+                self.is_draw
+                and self._state_occurrences[state] >= self.REPETITIONS_FOR_DRAW
+            ):
+                message = "The game is a draw by repetition."
+            elif self.is_draw:
+                message = "The game is a draw after 100 actions."
+            else:
+                message = f"{self.current_player}'s turn."
+
+        return True, message
+
+    def skip_turn_for_timeout(self) -> tuple[bool, str]:
+        """Skip the active turn without moving pieces when its clock expires."""
+        if self.finished:
+            return False, "The game has already ended."
+
+        timed_out_player = self.current_player
+        self.current_player = "O" if timed_out_player == "X" else "X"
+        self.action_count += 1
+
+        state = self._state_key()
+        self._state_occurrences[state] = self._state_occurrences.get(state, 0) + 1
+        if self._state_occurrences[state] >= self.REPETITIONS_FOR_DRAW:
+            self.is_draw = True
+            self.draw_reason = "repetition"
+            return True, "The game is a draw by repetition."
+        if self.action_count >= self.MAX_ACTIONS:
+            self.is_draw = True
+            self.draw_reason = "action_limit"
+            return True, "The game is a draw after 100 actions."
+        return (
+            True,
+            f"{timed_out_player} ran out of time. {self.current_player}'s turn.",
+        )
+
+    def _state_key(
+        self,
+    ) -> tuple[tuple[str, ...], str, tuple[int, ...], tuple[int, ...]]:
+        """Capture the full state, including next turn and both piece queues."""
+        return (
+            tuple(self.board),
+            self.current_player,
+            tuple(self.piece_order["X"]),
+            tuple(self.piece_order["O"]),
+        )
+
+    def _record_current_state(self) -> None:
+        """Record the current full state for threefold-repetition detection."""
+        state = self._state_key()
+        self._state_occurrences[state] = self._state_occurrences.get(state, 0) + 1

@@ -2,7 +2,10 @@
 
 import unittest
 
-from game_engine import ClassicGame
+from game_engine import BlitzGame, ClassicGame
+
+# These tests inspect internal snapshots to verify rejection and repetition rules.
+# pylint: disable=protected-access
 
 
 class ClassicGameTests(unittest.TestCase):
@@ -154,6 +157,154 @@ class ClassicGameTests(unittest.TestCase):
         self.assertEqual(other_game.board, [""] * 9)
         self.assertEqual(other_game.current_player, "X")
         self.assertFalse(other_game.finished)
+
+
+class BlitzGameTests(unittest.TestCase):
+    """Verify Blitz piece rotation, wins, draws, and invalid moves."""
+
+    def setUp(self):
+        """Give each test an independent Blitz round."""
+        self.game = BlitzGame()
+
+    def play(self, cells):
+        """Play legal placements and fail immediately if one is rejected."""
+        for cell in cells:
+            accepted, message = self.game.make_move(cell)
+            self.assertTrue(accepted, message)
+
+    def test_new_game_has_empty_piece_queues(self):
+        """A new round starts with X, no active marks, and one initial state."""
+        self.assertEqual(self.game.board, [""] * 9)
+        self.assertEqual(self.game.current_player, "X")
+        self.assertEqual(self.game.piece_order, {"X": [], "O": []})
+        self.assertEqual(self.game.oldest_cells, set())
+        self.assertEqual(self.game.action_count, 0)
+        self.assertEqual(list(self.game._state_occurrences.values()), [1])
+
+    def test_each_player_keeps_only_three_active_pieces(self):
+        """Each fourth placement removes only that player's oldest mark."""
+        self.play([0, 1, 2, 3, 4, 5, 6])
+        self.assertEqual(self.game.piece_order["X"], [2, 4, 6])
+        self.assertEqual(self.game.piece_order["O"], [1, 3, 5])
+        self.assertEqual(self.game.board[0], "")
+        self.assertEqual(self.game.board[1], "O")
+        self.assertEqual(self.game.board[2], "X")
+        self.assertEqual(self.game.oldest_cells, {1, 2})
+
+    def test_occupied_oldest_piece_cannot_be_selected(self):
+        """Selecting an oldest mark is rejected without changing game state."""
+        self.play([0, 1, 2, 3, 4, 5])
+        before = (
+            self.game.board.copy(),
+            self.game.current_player,
+            {player: queue.copy() for player, queue in self.game.piece_order.items()},
+            self.game.action_count,
+            self.game._state_occurrences.copy(),
+        )
+
+        accepted, message = self.game.make_move(0)
+
+        self.assertFalse(accepted)
+        self.assertIn("occupied", message)
+        self.assertEqual(
+            (
+                self.game.board,
+                self.game.current_player,
+                self.game.piece_order,
+                self.game.action_count,
+                self.game._state_occurrences,
+            ),
+            before,
+        )
+
+    def test_fourth_placement_can_win_after_oldest_piece_is_removed(self):
+        """Check wins on the post-rotation board, before ending by draw limits."""
+        self.play([8, 3, 0, 4, 1, 6])
+        self.game.action_count = self.game.MAX_ACTIONS - 1
+        self.play([2])
+        self.assertEqual(self.game.board[8], "")
+        self.assertEqual(self.game.board[:3], ["X", "X", "X"])
+        self.assertEqual(self.game.winner, "X")
+        self.assertEqual(self.game.action_count, 100)
+        self.assertTrue(self.game.finished)
+        self.assertFalse(self.game.is_draw)
+
+    def test_finished_game_rejects_additional_placements(self):
+        """A winner ends the round and later moves do not change state."""
+        self.play([8, 3, 0, 4, 1, 6, 2])
+        before = (
+            self.game.board.copy(),
+            self.game.action_count,
+            self.game.current_player,
+        )
+        accepted, _ = self.game.make_move(6)
+        self.assertFalse(accepted)
+        self.assertEqual(
+            (self.game.board, self.game.action_count, self.game.current_player), before
+        )
+
+    def test_third_occurrence_of_full_state_is_a_draw(self):
+        """Repetition tracking includes the board, next player, and queue order."""
+        expected = BlitzGame()
+        expected.make_move(0)
+        self.game._state_occurrences[expected._state_key()] = 2
+
+        accepted, message = self.game.make_move(0)
+
+        self.assertTrue(accepted)
+        self.assertIn("repetition", message)
+        self.assertTrue(self.game.is_draw)
+        self.assertEqual(self.game.draw_reason, "repetition")
+        self.assertTrue(self.game.finished)
+
+    def test_action_limit_ends_nonwinning_round_at_100(self):
+        """The 100th action draws unless that action already won."""
+        self.game.action_count = self.game.MAX_ACTIONS - 1
+        accepted, message = self.game.make_move(0)
+        self.assertTrue(accepted)
+        self.assertIn("100 actions", message)
+        self.assertEqual(self.game.action_count, 100)
+        self.assertTrue(self.game.is_draw)
+        self.assertEqual(self.game.draw_reason, "action_limit")
+
+    def test_timeout_skips_turn_without_removing_or_placing_pieces(self):
+        """A timeout advances the turn and preserves the board and queues."""
+        self.play([0, 1, 2, 3, 4, 5])
+        board_before = self.game.board.copy()
+        queues_before = {
+            player: queue.copy() for player, queue in self.game.piece_order.items()
+        }
+        active_player = self.game.current_player
+
+        accepted, message = self.game.skip_turn_for_timeout()
+
+        self.assertTrue(accepted)
+        self.assertIn("ran out of time", message)
+        self.assertEqual(self.game.board, board_before)
+        self.assertEqual(self.game.piece_order, queues_before)
+        self.assertEqual(self.game.current_player, "X" if active_player == "O" else "O")
+        self.assertEqual(self.game.action_count, 7)
+
+    def test_timeout_counts_toward_the_100_action_draw(self):
+        """Timed-out turns count as actions and can end the round."""
+        self.game.action_count = self.game.MAX_ACTIONS - 1
+        accepted, message = self.game.skip_turn_for_timeout()
+        self.assertTrue(accepted)
+        self.assertIn("100 actions", message)
+        self.assertEqual(self.game.action_count, 100)
+        self.assertTrue(self.game.is_draw)
+        self.assertEqual(self.game.draw_reason, "action_limit")
+
+    def test_reset_clears_rotation_and_repetition_history(self):
+        """A rematch starts with empty queues and a fresh occurrence count."""
+        self.play([0, 1, 2, 3, 4, 5, 6])
+        self.game.reset()
+        self.assertEqual(self.game.board, [""] * 9)
+        self.assertEqual(self.game.current_player, "X")
+        self.assertEqual(self.game.piece_order, {"X": [], "O": []})
+        self.assertEqual(self.game.action_count, 0)
+        self.assertIsNone(self.game.draw_reason)
+        self.assertEqual(list(self.game._state_occurrences.values()), [1])
 
 
 if __name__ == "__main__":
