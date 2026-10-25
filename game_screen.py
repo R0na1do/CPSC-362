@@ -1,9 +1,11 @@
 """Menus, player setup, and the local Classic game screen."""
 
 from functools import partial
-from game_engine import ClassicGame
-from nicegui import ui
 from typing import Any
+
+from nicegui import ui
+
+from game_engine import ClassicGame
 
 # Keep the arcade styling together so screen logic stays easy to scan.
 PAGE_CSS = """

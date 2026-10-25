@@ -1,7 +1,8 @@
 """Start the Graffiti Grid web application."""
 
-from game_screen import show_game
 from nicegui import ui
+
+from game_screen import show_game
 
 
 # Build a separate game screen for each page visit.
