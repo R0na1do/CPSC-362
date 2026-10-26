@@ -1,13 +1,25 @@
-"""Menus, player setup, and the local Classic game screen."""
+"""Local Classic and Blitz screens with optional guest sign-in."""
 
+import asyncio
 from functools import partial
 from math import ceil
 from time import monotonic
 from typing import Any
 
-from nicegui import ui
+from nicegui import run, ui
 
 from game_engine import BlitzGame, ClassicGame
+from guest_auth import GuestSignInError, sign_in_guest
+from rooms import (
+    RoomError,
+    create_room,
+    get_room,
+    join_room,
+    leave_room,
+    move_room,
+    ready_room,
+    rematch_room,
+)
 
 PLAYER_COLORS = {
     "pink": {"name": "Neon Pink", "hex": "#ff35a8", "symbol": "🩷"},
@@ -24,7 +36,6 @@ TIMER_OPTIONS = {
     60: "60 seconds",
 }
 
-# Keep the arcade styling together so screen logic stays easy to scan.
 PAGE_CSS = """
 body {
     min-height: 100vh;
@@ -43,15 +54,71 @@ body {
 }
 
 .arcade-shell {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    align-items: start;
+    gap: 24px;
     width: 100%;
-    max-width: 820px;
+    max-width: 1140px;
     margin: 0 auto;
-    padding: 8px 16px 28px;
+    padding: 16px;
+}
+
+.arcade-header, .screen-content {
+    width: 100%;
+    min-width: 0;
+    gap: 12px;
+}
+
+.menu-grid, .player-names {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    width: 100%;
+}
+
+.menu-grid { grid-template-columns: 1fr; gap: 12px; }
+.menu-card { padding: 16px; gap: 10px; }
+.mode-card.room-card { border-left-color: #ffe14a; }
+
+.match-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 210px;
+    gap: 20px;
+    align-items: start;
+    width: 100%;
+}
+
+.match-board-area, .match-controls {
+    width: 100%;
+    min-width: 0;
+    align-items: center;
+    gap: 12px;
+}
+
+.color-picker {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+}
+
+.color-picker > :first-child {
+    grid-column: 1 / -1;
+}
+
+.arcade-shell .q-btn {
+    min-height: 44px;
+}
+
+.guest-panel {
+    padding: 16px;
+    font-size: 13px;
 }
 
 .brand-art {
-    width: min(100%, 360px);
-    max-height: 175px;
+    width: 100%;
+    max-height: 135px;
     object-fit: contain;
     filter: drop-shadow(0 0 28px rgba(0, 217, 255, .14));
 }
@@ -66,7 +133,7 @@ body {
 
 .graffiti-heading {
     font-family: Impact, "Arial Black", sans-serif;
-    font-size: clamp(30px, 7vw, 48px);
+    font-size: clamp(26px, 4vw, 36px);
     font-weight: 900;
     font-style: italic;
     letter-spacing: .04em;
@@ -78,7 +145,7 @@ body {
 
 .arcade-panel {
     width: 100%;
-    padding: clamp(18px, 4vw, 30px);
+    padding: 18px;
     border: 1px solid rgba(255, 255, 255, .18);
     border-radius: 16px;
     background: linear-gradient(145deg, rgba(24, 27, 38, .97), rgba(10, 12, 18, .98));
@@ -98,7 +165,7 @@ body {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 9px;
     width: 100%;
-    max-width: 470px;
+    max-width: min(400px, calc(100dvh - 180px));
     margin: 0 auto;
     padding: 10px;
     border: 3px solid rgba(255,255,255,.82);
@@ -114,6 +181,10 @@ body {
     font-family: Impact, "Arial Black", sans-serif;
     font-size: clamp(42px, 10vw, 76px);
     font-weight: 900;
+    line-height: 1;
+    padding: 0;
+    align-items: center;
+    justify-content: center;
     border: 1px solid rgba(255,255,255,.17);
     border-radius: 7px;
     background: linear-gradient(145deg, rgba(37, 39, 50, .7), rgba(12, 13, 18, .86));
@@ -128,6 +199,15 @@ body {
 
 .game-cell[disabled] {
     opacity: 1 !important;
+}
+
+.online-board { max-width: clamp(200px, calc(100dvh - 330px), 320px); }
+.room-message:empty { display: none; }
+.online-player-names {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    width: 100%;
 }
 
 .mark-pink { color: #ff35a8 !important; text-shadow: 0 0 20px rgba(255,53,168,.65); }
@@ -194,8 +274,8 @@ body {
 }
 
 .color-swatch {
-    min-width: 78px;
-    min-height: 42px;
+    min-width: 0;
+    min-height: 44px;
     border: 2px solid rgba(255,255,255,.2);
     border-radius: 9px;
     font-size: 12px;
@@ -233,9 +313,42 @@ body {
     to { transform: scale(1.08); }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 900px) {
+    .nicegui-content { padding: 8px; }
+    .arcade-shell { grid-template-columns: 1fr; gap: 12px; padding: 0; }
+    .arcade-header {
+        display: grid;
+        grid-template-columns: 120px minmax(0, 1fr);
+        align-items: center;
+        gap: 12px;
+    }
+    .arcade-header > .arcade-kicker { display: none; }
+    .brand-art { max-height: 90px; }
+    .guest-panel { padding: 10px; }
+    .match-layout { grid-template-columns: minmax(0, 1fr) 190px; }
+}
+
+@media (max-width: 600px) {
+    .arcade-shell { padding-bottom: env(safe-area-inset-bottom, 0px); }
+    .menu-grid, .match-layout, .player-names { grid-template-columns: 1fr; }
+    .menu-grid, .match-layout { gap: 12px; }
+    .arcade-panel { padding: 14px; }
+    .guest-panel { padding: 10px; }
+    .game-board { max-width: min(360px, calc(100dvh - 360px)); }
     .game-board { gap: 6px; padding: 7px; }
+    .game-cell { font-size: clamp(28px, 9vw, 48px); min-height: 44px; }
+    .game-board.online-board { max-width: clamp(180px, calc(100dvh - 420px), 280px); }
+    .online-controls {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+    .online-note { grid-column: 1 / -1; }
+    .match-board-area .graffiti-heading { font-size: 22px; line-height: 1.3; }
     .player-badge { padding: 8px; font-size: 12px; }
+    .timer-panel { padding: 8px 12px; }
+    .timer-number { font-size: 28px; }
+    .victory-icon { font-size: 40px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -261,6 +374,14 @@ class ClassicGameScreen:
             "deadline": None,
         }
         self.controls: dict[str, Any] = {}
+        self.guest_client = None
+        self.guest_id = None
+        self.signing_in = False
+        self.room = None
+        self.room_busy = False
+        self.room_lock = asyncio.Lock()
+        self.lobby_open = False
+        self.online_name = "Guest"
 
         ui.dark_mode().enable()
         ui.add_css(PAGE_CSS)
@@ -269,12 +390,41 @@ class ClassicGameScreen:
 
     def _build_shell(self) -> None:
         """Create the persistent title and screen-content container."""
-        with ui.column().classes("arcade-shell items-center gap-5"):
-            ui.image("/assets/graffiti-grid.png").classes("brand-art")
-            ui.label("YOUR MOVE · YOUR COLOR · YOUR CROWN").classes(
-                "arcade-kicker text-center"
-            )
-            self.content = ui.column().classes("w-full items-center gap-5")
+        with ui.element("main").classes("arcade-shell"):
+            with ui.column().classes("arcade-header items-center"):
+                ui.image("/assets/graffiti-grid.png").props("fit=contain").classes("brand-art")
+                ui.label(
+                    "YOUR MOVE · YOUR COLOR · YOUR CROWN"
+                ).classes("arcade-kicker text-center")
+                with ui.column().classes("arcade-panel guest-panel items-center gap-2"):
+                    self.guest_status = ui.label("Not signed in. Local play is available.")
+                    self.guest_status.props('role="status" aria-live="polite"')
+                    self.guest_button = ui.button(
+                        "SIGN IN AS GUEST", on_click=self.sign_in
+                    )
+                    ui.label(
+                        "Guest sign-in lasts until refresh. Private rooms use Supabase."
+                    ).classes("text-xs text-gray-400 text-center")
+            self.content = ui.column().classes("screen-content items-center")
+            ui.timer(1.0, self.poll_room, immediate=False)
+
+    async def sign_in(self) -> None:
+        """Sign in once for this page without blocking other players."""
+        if self.signing_in or self.guest_client is not None:
+            return
+        self.signing_in = True
+        self.guest_button.disable()
+        self.guest_status.set_text("Signing in...")
+        try:
+            self.guest_client, self.guest_id = await run.io_bound(sign_in_guest)
+            self.guest_status.set_text("Signed in as guest.")
+            if self.lobby_open:
+                self.show_lobby()
+        except GuestSignInError as error:
+            self.guest_status.set_text(str(error))
+        finally:
+            self.signing_in = False
+            self.guest_button.set_enabled(self.guest_client is None)
 
     def _clear_screen(self) -> None:
         """Clear screen-specific controls before drawing another screen."""
@@ -284,44 +434,274 @@ class ClassicGameScreen:
         self.clock_state["deadline"] = None
         self.content.clear()
         self.controls.clear()
+        self.lobby_open = False
 
     def show_menu(self) -> None:
         """Display available modes and links to the game instructions."""
         self._clear_screen()
 
         with self.content:
-            with ui.column().classes("arcade-panel mode-card items-center gap-4"):
-                ui.label("PICK YOUR MODE").classes("graffiti-heading")
-                ui.label("Two players. One screen. Make your mark.").classes(
-                    "text-gray-300 text-center"
-                )
-                ui.button(
-                    "✦  PLAY CLASSIC  ✦",
-                    on_click=lambda: self.show_setup("Classic"),
-                    color="cyan-8",
-                ).classes("w-full text-lg font-black tracking-wider").props("size=lg")
-                ui.label("Classic · steady hands · no clock").classes(
-                    "text-xs uppercase tracking-widest text-gray-400 text-center"
-                )
-            with ui.column().classes(
-                "arcade-panel mode-card blitz-card items-center gap-4"
-            ):
-                ui.button(
-                    "⚡  PLAY BLITZ  ⚡",
-                    on_click=lambda: self.show_setup("Blitz"),
-                    color="pink-8",
-                ).classes("w-full text-lg font-black tracking-wider").props("size=lg")
-                ui.label("Blitz · 3 pieces each · 30-second turn clock").classes(
-                    "text-xs uppercase tracking-widest text-gray-400 text-center"
-                )
-                ui.label("Your fourth mark rotates your oldest piece out.").classes(
-                    "text-sm text-gray-300 text-center"
-                )
+            ui.label("PICK YOUR MODE").classes("graffiti-heading")
+            with ui.element("div").classes("menu-grid"):
+                with ui.column().classes("arcade-panel mode-card menu-card items-center"):
+                    ui.button(
+                        "✦  PLAY CLASSIC  ✦",
+                        on_click=lambda: self.show_setup("Classic"),
+                        color="cyan-8",
+                    ).classes("w-full text-lg font-black tracking-wider").props("size=lg")
+                    ui.label("Two players on one screen. Three in a row wins. No timer.").classes(
+                        "text-sm text-gray-300 text-center"
+                    )
+                with ui.column().classes(
+                    "arcade-panel mode-card blitz-card menu-card items-center"
+                ):
+                    ui.button(
+                        "⚡  PLAY BLITZ  ⚡",
+                        on_click=lambda: self.show_setup("Blitz"),
+                        color="pink-8",
+                    ).classes("w-full text-lg font-black tracking-wider").props("size=lg")
+                    ui.label("Three pieces each. Your fourth replaces your oldest. Timed turns.").classes(
+                        "text-sm text-gray-300 text-center"
+                    )
+                with ui.column().classes(
+                    "arcade-panel mode-card room-card menu-card items-center"
+                ):
+                    ui.button(
+                        "PRIVATE ROOM LOBBY", on_click=self.show_lobby, color="amber-9"
+                    ).classes("w-full text-lg font-black tracking-wider").props("size=lg")
+                    ui.label("Play Classic online. Create a room or join a friend by code.").classes(
+                        "text-sm text-gray-300 text-center"
+                    )
             ui.button("HOW TO PLAY", on_click=self.show_rules).props("flat")
 
-            ui.label("LOCAL ARCADE · ONLINE ROOMS IN DEVELOPMENT").classes(
+            ui.label("LOCAL CLASSIC / BLITZ · PRIVATE ONLINE CLASSIC").classes(
                 "text-xs text-gray-500 text-center tracking-widest"
             )
+
+    async def poll_room(self) -> None:
+        """Refresh a visible room once per second."""
+        if (
+            self.lobby_open
+            and self.room
+            and not self.room_busy
+            and self.room["status"] != "abandoned"
+        ):
+            await self.update_room("refresh", quiet=True)
+
+    def show_lobby(self) -> None:
+        """Show the current room or the Create/Join form."""
+        self._clear_screen()
+        self.lobby_open = True
+        self.room_buttons = []
+        with self.content:
+            with ui.column().classes("arcade-panel gap-3"):
+                ui.label("ONLINE CLASSIC").classes("graffiti-heading")
+                self.room_status = ui.label().classes("room-message")
+                self.room_status.props('role="status" aria-live="polite"')
+                if self.room:
+                    self._show_online_room()
+                elif self.guest_client is None:
+                    self.room_status.set_text("Sign in as a guest above to use rooms.")
+                else:
+                    name = ui.input("Your name", value=self.online_name).props(
+                        "maxlength=20 outlined dense"
+                    )
+                    ui.label("Private Classic rooms use no turn timer.")
+                    ui.label("Create a room to get a code you can share.")
+                    create = ui.button(
+                        "CREATE ROOM",
+                        on_click=lambda: self.update_room("create", name=name.value),
+                    )
+                    ui.separator()
+                    ui.label("OR JOIN AN EXISTING ROOM").classes("font-bold")
+                    code = ui.input(
+                        "Code from the host", placeholder="Paste the host's code"
+                    ).props("maxlength=32 inputmode=numeric outlined dense")
+                    join = ui.button(
+                        "JOIN ROOM",
+                        on_click=lambda: self.update_room(
+                            "join", code.value, name=name.value
+                        ),
+                    )
+                    join.bind_enabled_from(
+                        code, "value", backward=lambda value: bool(value and value.strip())
+                    )
+                    self.room_buttons.extend([create, join])
+                back = ui.button("BACK TO MENU", on_click=self.show_menu).props("flat")
+                self.room_buttons.append(back)
+
+    def _show_online_room(self) -> None:
+        """Build the online board and room controls."""
+        room = self.room
+        seat = "x" if room["x_player_id"] == self.guest_id else "o"
+        ui.label(
+            f"Room {room['room_code']} · Round {room['round_no']} · You are {seat.upper()}"
+        ).classes("text-sm font-bold")
+        with ui.element("div").classes("match-layout"):
+            with ui.column().classes("match-board-area"):
+                with ui.element("div").classes("online-player-names"):
+                    for player in ("x", "o"):
+                        name = room.get(f"{player}_name") or "Waiting for player"
+                        ui.label(f"{player.upper()} · {name}").classes(
+                            "break-all "
+                            + ("mark-pink" if player == "x" else "mark-cyan")
+                        )
+                if room["status"] == "active":
+                    status = f"{room[room['turn'] + '_name']}'s turn · {room['turn'].upper()}"
+                elif room["status"] == "finished":
+                    status = (
+                        f"{room[room['winner'] + '_name']} wins!"
+                        if room["winner"]
+                        else "It's a draw!"
+                    )
+                elif room["status"] == "abandoned":
+                    status = "The host closed this room."
+                else:
+                    status = "Both players must be ready to start."
+                ui.label(status).classes(
+                    "text-xl font-bold text-center break-all"
+                ).props('role="status" aria-live="polite"')
+                winning = set()
+                if room["winner"] and room.get("end_reason") == "win":
+                    for line in ClassicGame.WINNING_LINES:
+                        if all(room["board"][cell] == room["winner"] for cell in line):
+                            winning.update(line)
+                with ui.element("div").classes("game-board online-board"):
+                    for cell, mark in enumerate(room["board"]):
+                        button = ui.button(
+                            mark.upper(),
+                            on_click=partial(self.update_room, "move", cell=cell),
+                            color=None,
+                        ).classes("game-cell")
+                        row, column = divmod(cell, 3)
+                        button.props(
+                            f'aria-label="Online row {row + 1}, column {column + 1}: '
+                            f'{mark.upper() or "empty"}"'
+                        )
+                        button.set_enabled(
+                            room["status"] == "active"
+                            and room["turn"] == seat
+                            and not mark
+                        )
+                        if mark:
+                            button.classes("mark-pink" if mark == "x" else "mark-cyan")
+                        if cell in winning:
+                            button.classes("winning-cell")
+                        self.room_buttons.append(button)
+            with ui.column().classes("match-controls online-controls"):
+                if room["status"] == "waiting":
+                    for player in ("x", "o"):
+                        state = "Ready" if room[f"{player}_ready"] else "Not ready"
+                        ui.label(f"{player.upper()}: {state}").classes("online-note")
+                    ready = ui.button(
+                        "READY", on_click=lambda: self.update_room("ready")
+                    )
+                    ready.set_enabled(
+                        room["o_player_id"] is not None and not room[f"{seat}_ready"]
+                    )
+                    self.room_buttons.append(ready)
+                elif room["status"] == "finished":
+                    if room.get("end_reason") == "forfeit":
+                        ui.label("Round ended by forfeit.").classes("online-note")
+                    ui.label("Both players must agree to a rematch.").classes(
+                        "online-note"
+                    )
+                    rematch = ui.button(
+                        "REMATCH", on_click=lambda: self.update_room("rematch")
+                    )
+                    rematch.set_enabled(not room[f"{seat}_ready"])
+                    self.room_buttons.append(rematch)
+                    if room[f"{seat}_ready"]:
+                        ui.label("Waiting for the other player to agree.").classes(
+                            "online-note"
+                        )
+                refresh = ui.button(
+                    "REFRESH ROOM", on_click=lambda: self.update_room("refresh")
+                )
+                self.room_buttons.append(refresh)
+                with ui.dialog() as confirmation, ui.card():
+                    ui.label(
+                        "Leave this room? Leaving an active round counts as a loss."
+                    )
+                    ui.button("Keep playing", on_click=confirmation.close)
+                    leave = ui.button(
+                        "CONFIRM LEAVE", on_click=lambda: self.update_room("leave")
+                    )
+                    self.room_buttons.append(leave)
+                leave = ui.button("LEAVE ROOM", on_click=confirmation.open).props(
+                    "flat"
+                )
+                self.room_buttons.append(leave)
+
+    async def update_room(
+        self, action: str, code: str = "", name: str = "", cell=None, quiet=False
+    ) -> None:
+        """Wait for a background refresh before handling a player click."""
+        if quiet and self.room_busy:
+            return
+        snapshot = self.room
+        async with self.room_lock:
+            if not self.lobby_open or (snapshot and self.room is None):
+                return
+            await self._send_room_request(action, code, name, cell, quiet, snapshot)
+
+    async def _send_room_request(self, action, code, name, cell, quiet, snapshot):
+        """Send a request and display only the confirmed database state."""
+        self.room_busy = True
+        buttons = [(button, button.enabled) for button in self.room_buttons]
+        if not quiet:
+            for button, _ in buttons:
+                button.disable()
+            self.room_status.set_text("Contacting Supabase...")
+        changed = False
+        try:
+            if action == "create":
+                room = await run.io_bound(create_room, self.guest_client, name)
+                self.online_name = name.strip()
+            elif action == "join":
+                room = await run.io_bound(join_room, self.guest_client, code, name)
+                self.online_name = name.strip()
+            elif action == "ready":
+                room = await run.io_bound(
+                    ready_room, self.guest_client, self.room["room_code"]
+                )
+            elif action == "move":
+                room = await run.io_bound(
+                    move_room,
+                    self.guest_client,
+                    self.room["room_code"],
+                    cell,
+                    snapshot["version"],
+                )
+            elif action in ("rematch", "leave"):
+                operation = rematch_room if action == "rematch" else leave_room
+                room = await run.io_bound(
+                    operation,
+                    self.guest_client,
+                    self.room["room_code"],
+                    snapshot["round_no"],
+                )
+                if action == "leave":
+                    room = None
+            else:
+                room = await run.io_bound(
+                    get_room, self.guest_client, self.room["room_code"]
+                )
+            if quiet and not self.lobby_open:
+                return
+            changed = room != self.room
+            self.room = room
+            self.room_status.set_text("")
+        except RoomError as error:
+            if self.lobby_open:
+                self.room_status.set_text(str(error))
+        finally:
+            self.room_busy = False
+            if not quiet:
+                for button, enabled in buttons:
+                    button.set_enabled(enabled)
+        if changed:
+            self.show_lobby()
 
     def show_rules(self) -> None:
         """Explain both local game modes and their main rules."""
@@ -358,7 +738,7 @@ class ClassicGameScreen:
                 ui.label(f"{self.mode.upper()} · LOCAL ARCADE MATCH").classes(
                     "arcade-kicker text-center"
                 )
-                with ui.row().classes("w-full gap-3"):
+                with ui.element("div").classes("player-names"):
                     name_x = (
                         ui.input("Player X · name your mark", value=self.names["X"])
                         .classes("w-full")
@@ -403,15 +783,18 @@ class ClassicGameScreen:
 
     def _build_color_picker(self, player: str) -> None:
         """Show visible, clickable color swatches for one player."""
-        with ui.row().classes("w-full items-center gap-2 flex-wrap"):
+        with ui.element("div").classes("color-picker"):
             ui.label(f"{player} · {self.names[player]}").classes(
                 f"font-bold mark-{self.colors[player]} min-w-24"
             )
             for slug, color in PLAYER_COLORS.items():
                 button = ui.button(
-                    f"{color['symbol']} {color['name']}",
+                    color["symbol"],
                     on_click=partial(self._select_color, player, slug),
+                    color=None,
                 ).classes("color-swatch")
+                button.props(f'aria-label="{player} color: {color["name"]}"')
+                button.tooltip(color["name"])
                 button.style(
                     f"background-color: {color['hex']}; color: #101117;"
                 )
@@ -463,15 +846,18 @@ class ClassicGameScreen:
         self.controls["buttons"] = []
 
         with self.content:
-            self._build_player_labels()
-            if self.mode == "Blitz":
-                self._build_turn_clock()
-            self._build_game_board()
-            self._build_result_panel()
-            self._build_leave_controls()
-            ui.label("X starts · local round · no account needed").classes(
-                "text-xs text-gray-500 text-center tracking-widest"
-            )
+            with ui.element("div").classes("match-layout"):
+                with ui.column().classes("match-board-area"):
+                    self._build_player_labels()
+                    self._build_game_board()
+                    ui.label("X starts · local round · no account needed").classes(
+                        "text-xs text-gray-500 text-center tracking-widest"
+                    )
+                with ui.column().classes("match-controls"):
+                    if self.mode == "Blitz":
+                        self._build_turn_clock()
+                    self._build_result_panel()
+                    self._build_leave_controls()
             self.refresh_board()
             if self.mode == "Blitz" and self.clock_state["duration"]:
                 self._start_turn_clock()

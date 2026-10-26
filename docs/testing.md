@@ -1,87 +1,99 @@
-# Testing Classic game rules
+# Graffiti Grid setup and checks
 
-These automated tests check `ClassicGame` in `game_engine.py`.
-They use Python's built-in `unittest`, so no test packages, NiceGUI server,
-database, or AWS connection are needed to run them.
+## Run the app
 
-## Run the tests
+Windows PowerShell, from the project folder:
 
-Open a terminal in the repository root (the folder containing `game_engine.py`).
-With your Python environment activated, run:
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe main.py
+```
+
+On macOS:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python main.py
+```
+
+Skip environment creation if `.venv` exists. Open http://127.0.0.1:8080.
+Stop with Ctrl+C. Restart after code or `.env` changes.
+Windows skips the unsupported `uvloop` package.
+
+## Supabase
+
+Keep the project URL and publishable key in `.env`, using `.env.example` as a
+reference. `.env` stays out of Git. Never use a secret or service-role key.
+Anonymous sign-ins must be enabled. If CAPTCHA is required, keep it enabled;
+this version does not support it yet.
+
+Database files, in order:
+
+1. `supabase/rooms.sql`: two player seats and participant-only access.
+2. `supabase/online_classic.sql`: readiness, moves, results, rematches, and leaving.
+3. `supabase/five_digit_codes.sql`: five-digit codes, with old-code compatibility.
+
+The first two were applied through MCP after the broad "Allow game access"
+policy was reviewed and replaced. Do not rerun them. The five-digit update is
+tested locally but has not been confirmed applied to Supabase.
+Keep the safety guards and RLS enabled. Review database changes before applying.
+No existing game rows are deleted by these scripts.
+
+## Play and check
+
+- Classic: take turns, play a win and a draw, then try Play Again.
+- Blitz: a fourth piece removes that player's oldest piece; test the turn timer.
+- Online: open two tabs and sign in separately. Enter player names.
+- Click CREATE ROOM to generate a code. Paste that actual code into
+  Code from the host in the other tab, then click JOIN ROOM.
+- Both players click READY. Play a round, then both request REMATCH.
+  The starter alternates. A third player cannot join a full room.
+- LEAVE ROOM asks for confirmation and forfeits an active round.
+  BACK TO MENU keeps the room open.
+
+Refreshing the page loses the guest session. Keep test tabs open.
+New five-digit codes keep leading zeros. Existing eight-character rooms still
+work; leave an old waiting room before creating one with a new code.
+Two computers can each run the app using the same Supabase project settings.
+Public hosting is not configured.
+
+## Tests and limits
 
 ```bash
 python -B -m unittest discover -v
 ```
 
-Without an activated environment, Linux/macOS users can use `python3` instead
-of `python`. Windows users can use `py -3.12` instead.
+Use `python3` on macOS. Expected result: **42 tests, OK**.
+These tests use fake provider responses and need no database connection.
+For SQL tests, apply all three database files to a disposable local database,
+then run `tests/rooms.sql`. Its test rows roll back. Do not run it in production.
 
-- `-B` prevents Python from writing cache files.
-- `-m unittest` starts Python's built-in test runner.
-- `discover` finds the test files in `tests/`.
-- `-v` displays each test's name and result.
+Passed checks include local rules, live room creation/joining, readiness,
+validated moves, wins/draws, mutual rematches, duplicate rejection, permissions,
+and simultaneous joins. Browser checks covered desktop/phone layouts, X/O
+alignment, Create/Join controls, and the local Blitz timer. Live tests added test
+guests and two isolated rooms; existing data was preserved.
 
-Expected summary (execution time may vary):
+Actual macOS and iPhone Safari remain untested. Matchmaking, online Blitz/timers,
+history, refresh/reconnect recovery, CAPTCHA, and join rate limits are unfinished.
+This is the agreed basic version, not every planned feature in `requirements.md`
+and not a release for unrestricted public hosting.
 
-```text
-Ran 11 tests in ...
+## Lecture techniques
 
-OK
-```
+These references were checked in the slide text from the supplied course ZIP:
 
-The winning-line test includes 16 cases: eight winning lines for each player.
-Other tests also use multiple cases, so 11 is the number of test methods,
-not the total number of scenarios checked.
+- **Modular design:** `Ch 6 - Quality and Security.key`, 6.1.2.
+  Screens, local rules, sign-in, and room requests have separate jobs.
+- **Testing:** the same file, 6.2.4. Test rules and permissions before claiming success.
+- **Cohesion/coupling:** `Ch 11 - Component level design.key`, 11.2.3-11.2.4.
+  Room requests stay together in `rooms.py`; SQL stays out of the screens.
+- **Traceability:** `Ch 7 Requirements Engineering.key`, 7.2.6.
+  Room tests check the private-room and security requirements in sections 4 and 6.
 
-To run just the first test:
-
-```bash
-python -B -m unittest tests.test_game_engine.ClassicGameTests.test_new_game -v
-```
-
-## Coverage
-
-- Empty board, X starting, and no initial result.
-- Valid placements and alternating turns.
-- Invalid types and out-of-range positions, with no state changes.
-- Occupied cells rejected without state changes.
-- Every winning row, column, and diagonal for both players.
-- Full-board draws and a win on the ninth move.
-- Moves rejected after a win or draw.
-- Reset during play, after a win, and after a draw; play can restart.
-- Separate games keep independent state.
-
-## Understand the first test
-
-`setUp()` creates a fresh game before each test method. `test_new_game()`
-checks it using the shared `assert_fresh_game()` helper:
-
-```python
-self.assertEqual(self.game.board, [""] * 9)
-self.assertEqual(self.game.current_player, "X")
-self.assertIsNone(self.game.winner)
-self.assertFalse(self.game.is_draw)
-self.assertFalse(self.game.finished)
-```
-
-An assertion checks an expected result. For example, `assertEqual` fails if
-the actual board differs from the expected nine empty strings.
-
-`make_move()` returns two values: whether the move was accepted and a message.
-The rejection tests check that the move is rejected, its message is nonempty,
-and the board, turn, and result remain unchanged.
-
-## Limits and manual checks
-
-These tests verify the Python engine, not browser behavior or deployment.
-The Classic engine tests workflow runs these tests on GitHub for pushes and pull requests. View results in the repository's Actions tab.
-
-For a manual interface check, install the project dependencies and run
-`python main.py`. Visit `http://127.0.0.1:8080`, start Classic with different
-player names, play a win and a draw, try occupied cells, and use Play Again.
-Check that the messages and board agree with the result, and test leaving
-an unfinished round. Stop the server with Ctrl+C.
-
-If a test fails, read its name and the expected/actual values before changing
-the engine. Record the failure and investigate whether the code or test is
-wrong; do not change an expected result just to make the test pass.
+For the exact Supabase API, SQL locking/permissions, and Windows package condition:
+This is not covered in the provided notes. Those details use official documentation.
+A matching responsive CSS example was not verified in the notes. The implementation
+is not claimed to be 100 percent lecture-derived.

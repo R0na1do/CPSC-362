@@ -244,15 +244,30 @@ class BlitzGameTests(unittest.TestCase):
         )
 
     def test_third_occurrence_of_full_state_is_a_draw(self):
-        """Repetition tracking includes the board, next player, and queue order."""
-        expected = BlitzGame()
-        expected.make_move(0)
-        self.game._state_occurrences[expected._state_key()] = 2
+        """Legal moves keep the second occurrence playable and draw on the third."""
+        self.play([0, 1, 2, 3, 4, 5])
+        repeated_board = self.game.board.copy()
+        repeated_queues = {
+            player: queue.copy() for player, queue in self.game.piece_order.items()
+        }
+        cycle = [7, 6, 0, 1, 2, 3, 4, 5]
 
-        accepted, message = self.game.make_move(0)
+        self.play(cycle)
+        self.assertEqual(self.game.board, repeated_board)
+        self.assertEqual(self.game.piece_order, repeated_queues)
+        self.assertEqual(self.game.current_player, "X")
+        self.assertFalse(self.game.finished)
 
+        self.play(cycle[:-1])
+        self.assertFalse(self.game.finished)
+        accepted, message = self.game.make_move(cycle[-1])
         self.assertTrue(accepted)
         self.assertIn("repetition", message)
+        self.assertEqual(self.game.board, repeated_board)
+        self.assertEqual(self.game.piece_order, repeated_queues)
+        self.assertEqual(self.game.current_player, "X")
+        self.assertEqual(self.game.action_count, 22)
+        self.assertIsNone(self.game.winner)
         self.assertTrue(self.game.is_draw)
         self.assertEqual(self.game.draw_reason, "repetition")
         self.assertTrue(self.game.finished)
