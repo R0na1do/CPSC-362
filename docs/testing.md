@@ -53,7 +53,14 @@ No existing game rows are deleted by these scripts.
 - LEAVE ROOM asks for confirmation and forfeits an active round.
   BACK TO MENU keeps the room open.
 
-Refreshing the page loses the guest session. Keep test tabs open.
+Refreshing the page restores the same guest identity in that tab. Room and board
+recovery are not connected yet; do not refresh tabs during a game for now.
+Recovery tokens stay in private server-side `.nicegui/` storage, separated by
+browser cookie and tab. They are not sent to browser JavaScript or committed.
+If recovery fails, retry or explicitly choose SIGN IN AS NEW GUEST; a new identity
+cannot reclaim the previous guest's seat. Clearing browser cookies loses access
+to the saved identity. For recovery across server restarts, set a stable, private
+`NICEGUI_STORAGE_SECRET` in `.env`; otherwise the signing key changes on restart.
 New five-digit codes keep leading zeros. Existing eight-character rooms still
 work; leave an old waiting room before creating one with a new code.
 Two computers can each run the app using the same Supabase project settings.
@@ -65,7 +72,7 @@ Public hosting is not configured.
 python -B -m unittest discover -v
 ```
 
-Use `python3` on macOS. Expected result: **42 tests, OK**.
+Use `python3` on macOS. Expected result: **48 tests, OK**.
 These tests use fake provider responses and need no database connection.
 For SQL tests, apply all three database files to a disposable local database,
 then run `tests/rooms.sql`. Its test rows roll back. Do not run it in production.
@@ -77,7 +84,7 @@ alignment, Create/Join controls, and the local Blitz timer. Live tests added tes
 guests and two isolated rooms; existing data was preserved.
 
 Actual macOS and iPhone Safari remain untested. Matchmaking, online Blitz/timers,
-history, refresh/reconnect recovery, CAPTCHA, and join rate limits are unfinished.
+history, room/board reconnect recovery, CAPTCHA, and join rate limits are unfinished.
 This is the agreed basic version, not every planned feature in `requirements.md`
 and not a release for unrestricted public hosting.
 

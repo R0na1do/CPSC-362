@@ -1,5 +1,7 @@
 """Start the Graffiti Grid web application."""
 
+import os
+import secrets
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -19,9 +21,13 @@ def home():
 
 
 if __name__ == "__main__":
+    # Session files contain tokens; only the server account should access this folder.
+    app.storage.path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    app.storage.path.chmod(0o700)
     ui.run(
         title="Graffiti Grid",
         host="127.0.0.1",
         port=8080,
         reload=False,
+        storage_secret=os.getenv("NICEGUI_STORAGE_SECRET") or secrets.token_urlsafe(32),
     )

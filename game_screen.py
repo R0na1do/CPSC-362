@@ -6,10 +6,15 @@ from math import ceil
 from time import monotonic
 from typing import Any
 
-from nicegui import run, ui
+from nicegui import app, run, ui
 
 from game_engine import BlitzGame, ClassicGame
-from guest_auth import GuestSignInError, sign_in_guest
+from guest_auth import (
+    GuestSignInError,
+    restore_guest,
+    session_credentials,
+    sign_in_guest,
+)
 from rooms import (
     RoomError,
     create_room,
@@ -377,6 +382,10 @@ class ClassicGameScreen:
         self.guest_client = None
         self.guest_id = None
         self.signing_in = False
+        self.recovering = True
+        self.page_client = ui.context.client
+        self.guest_storage = app.storage.user
+        self.guest_storage_key = None
         self.room = None
         self.room_busy = False
         self.room_lock = asyncio.Lock()
@@ -387,6 +396,7 @@ class ClassicGameScreen:
         ui.add_css(PAGE_CSS)
         self._build_shell()
         self.show_menu()
+        ui.timer(0.01, self.restore_session, once=True)
 
     def _build_shell(self) -> None:
         """Create the persistent title and screen-content container."""
@@ -402,21 +412,80 @@ class ClassicGameScreen:
                     self.guest_button = ui.button(
                         "SIGN IN AS GUEST", on_click=self.sign_in
                     )
+                    self.guest_button.disable()
+                    self.recovery_button = ui.button(
+                        "TRY RECOVERY AGAIN", on_click=self.restore_session
+                    )
+                    self.recovery_button.set_visibility(False)
                     ui.label(
-                        "Guest sign-in lasts until refresh. Private rooms use Supabase."
+                        "Guest sign-in survives refresh in this tab."
                     ).classes("text-xs text-gray-400 text-center")
             self.content = ui.column().classes("screen-content items-center")
             ui.timer(1.0, self.poll_room, immediate=False)
 
+    async def restore_session(self) -> None:
+        """Recover this tab's identity without creating another guest."""
+        if self.signing_in:
+            return
+        self.signing_in = True
+        self.recovering = True
+        self.guest_button.disable()
+        self.recovery_button.set_visibility(False)
+        try:
+            await self.page_client.connected()
+            self.guest_storage_key = f"guest:{self.page_client.tab_id}"
+            tokens = self.guest_storage.get(self.guest_storage_key)
+            if tokens is None:
+                return
+            self.guest_status.set_text("Restoring guest session...")
+            if not isinstance(tokens, dict):
+                raise GuestSignInError("Saved guest session could not be read.")
+            client, identity = await run.io_bound(
+                restore_guest, tokens.get("access_token"), tokens.get("refresh_token")
+            )
+            await self._remember_guest(client, identity)
+            self.guest_status.set_text("Guest session restored.")
+            if self.lobby_open:
+                self.show_lobby()
+        except GuestSignInError as error:
+            self.guest_status.set_text(str(error))
+            self.recovery_button.set_visibility(True)
+            self.guest_button.set_text("SIGN IN AS NEW GUEST")
+        finally:
+            self.signing_in = False
+            self.recovering = False
+            self.guest_button.set_enabled(self.guest_client is None)
+
+    async def _remember_guest(self, client, identity) -> None:
+        """Save credentials and keep rotated tokens current after room requests."""
+        try:
+            session = await run.io_bound(client.auth.get_session)
+        except Exception:  # pylint: disable=broad-exception-caught
+            raise GuestSignInError("Could not save guest session. Try again.") from None
+        self.guest_storage[self.guest_storage_key] = session_credentials(session)
+        loop = asyncio.get_running_loop()
+        storage, key = self.guest_storage, self.guest_storage_key
+
+        def save_rotated_session(_event, updated_session):
+            if updated_session is not None:
+                tokens = session_credentials(updated_session)
+                # SDK callbacks may execute in a worker thread; storage uses the UI loop.
+                loop.call_soon_threadsafe(storage.__setitem__, key, tokens)
+
+        client.auth.on_auth_state_change(save_rotated_session)
+        self.guest_client, self.guest_id = client, identity
+        self.recovery_button.set_visibility(False)
+
     async def sign_in(self) -> None:
         """Sign in once for this page without blocking other players."""
-        if self.signing_in or self.guest_client is not None:
+        if self.recovering or self.signing_in or self.guest_client is not None:
             return
         self.signing_in = True
         self.guest_button.disable()
         self.guest_status.set_text("Signing in...")
         try:
-            self.guest_client, self.guest_id = await run.io_bound(sign_in_guest)
+            client, identity = await run.io_bound(sign_in_guest)
+            await self._remember_guest(client, identity)
             self.guest_status.set_text("Signed in as guest.")
             if self.lobby_open:
                 self.show_lobby()
