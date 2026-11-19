@@ -159,3 +159,23 @@ class GuestSignInTests(unittest.TestCase):
         ):
             with self.subTest(session=session), self.assertRaises(GuestSignInError):
                 session_credentials(session)
+
+    def test_session_credentials_reject_whitespace_tokens(self):
+        """Blank tokens must not replace a saved recovery credential pair."""
+        for field in ("access_token", "refresh_token"):
+            for blank in (" ", "\t\n"):
+                values = {"access_token": "access", "refresh_token": "refresh"}
+                values[field] = blank
+                with self.subTest(field=field, blank=blank):
+                    with self.assertRaises(GuestSignInError):
+                        session_credentials(SimpleNamespace(**values))
+
+    def test_restore_user_lookup_failure_does_not_create_guest(self):
+        """Identity verification failures stay private and never create a guest."""
+        client = self.create_client.return_value
+        client.auth.set_session.return_value = SimpleNamespace(session=object())
+        client.auth.get_user.side_effect = RuntimeError("private user lookup details")
+        with self.assertRaises(GuestSignInError) as caught:
+            restore_guest("access", "refresh")
+        self.assertNotIn("private user lookup details", str(caught.exception))
+        client.auth.sign_in_anonymously.assert_not_called()
