@@ -1,0 +1,3 @@
+[flake8]
+# Match Black's default width so both formatters accept the same source.
+max-line-length = 88
