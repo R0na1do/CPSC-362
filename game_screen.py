@@ -377,11 +377,15 @@ class ClassicGameScreen:
                 self._build_color_picker("O")
                 timer_choice = None
                 if mode == "Blitz":
-                    timer_choice = ui.select(
-                        options=TIMER_OPTIONS,
-                        value=30,
-                        label="Turn timer · default is 30 seconds",
-                    ).classes("w-full").props("dense outlined")
+                    timer_choice = (
+                        ui.select(
+                            options=TIMER_OPTIONS,
+                            value=30,
+                            label="Turn timer · default is 30 seconds",
+                        )
+                        .classes("w-full")
+                        .props("dense outlined")
+                    )
                 else:
                     ui.label("Classic is untimed.").classes("text-xs text-gray-400")
                 error = ui.label().classes("text-red-300")
@@ -412,9 +416,7 @@ class ClassicGameScreen:
                     f"{color['symbol']} {color['name']}",
                     on_click=partial(self._select_color, player, slug),
                 ).classes("color-swatch")
-                button.style(
-                    f"background-color: {color['hex']}; color: #101117;"
-                )
+                button.style(f"background-color: {color['hex']}; color: #101117;")
                 if self.colors[player] == slug:
                     button.classes("color-swatch-selected")
                 self.controls["color_swatch_buttons"][player][slug] = button
@@ -475,9 +477,7 @@ class ClassicGameScreen:
             self.refresh_board()
             if self.mode == "Blitz" and self.clock_state["duration"]:
                 self._start_turn_clock()
-                self.controls["clock_task"] = ui.timer(
-                    0.2, self._tick_turn_clock
-                )
+                self.controls["clock_task"] = ui.timer(0.2, self._tick_turn_clock)
                 self._tick_turn_clock()
 
     def _build_player_labels(self) -> None:
