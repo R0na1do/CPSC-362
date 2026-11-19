@@ -1,4 +1,4 @@
-"""Menus, player setup, and the local Classic game screen."""
+"""Graffiti Grid menu, player setup, and local Classic game."""
 
 from functools import partial
 
@@ -6,37 +6,49 @@ from nicegui import ui
 
 from game_engine import ClassicGame
 
-
-# Shared appearance for this page.
 PAGE_CSS = """
 body {
-    background: radial-gradient(circle at top, #243253, #090e1a 65%);
-    color: #f1f5f9;
+    min-height: 100vh;
+    background:
+        radial-gradient(ellipse at 15% 8%, #27113d 0, transparent 32rem),
+        radial-gradient(ellipse at 90% 88%, #073342 0, transparent 30rem),
+        #08090d;
+    color: #f8fafc;
 }
 
 .arcade-shell {
     width: 100%;
-    max-width: 620px;
+    max-width: 760px;
     margin: 0 auto;
-    padding: 24px 16px;
-}
-
-.arcade-title {
-    font-size: clamp(36px, 9vw, 62px);
-    font-weight: 900;
-    font-style: italic;
-    letter-spacing: -2px;
-    color: #facc15;
-    text-shadow: 3px 3px #db2777;
-    text-align: center;
+    padding: 24px 16px 40px;
 }
 
 .arcade-panel {
     width: 100%;
-    padding: 24px;
-    border: 1px solid #475569;
+    padding: clamp(18px, 5vw, 30px);
+    border: 1px solid rgba(255, 255, 255, .18);
     border-radius: 22px;
-    background: #111a2d;
+    background: rgba(13, 16, 25, .94);
+    box-shadow: 0 18px 60px rgba(0, 0, 0, .42);
+}
+
+.menu-art {
+    width: min(100%, 450px);
+    max-height: 340px;
+    object-fit: contain;
+    border-radius: 18px;
+    filter: drop-shadow(0 0 22px rgba(0, 204, 255, .2));
+}
+
+.arcade-heading {
+    font-size: clamp(25px, 6vw, 38px);
+    line-height: 1.05;
+    font-weight: 900;
+    font-style: italic;
+    letter-spacing: .04em;
+    color: #ffe52e;
+    text-shadow: 2px 2px #fa168c, 4px 4px #10131b;
+    text-align: center;
 }
 
 .game-board {
@@ -44,57 +56,80 @@ body {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
     width: 100%;
-    max-width: 390px;
+    max-width: 430px;
     margin: 0 auto;
+    padding: 12px;
+    border: 3px solid #f1eee6;
+    border-radius: 12px;
+    background:
+        linear-gradient(90deg, transparent 32.8%, #e8e5dc 33%, #e8e5dc 33.7%, transparent 34%),
+        linear-gradient(90deg, transparent 66.2%, #e8e5dc 66.5%, #e8e5dc 67.2%, transparent 67.5%),
+        linear-gradient(0deg, transparent 32.8%, #e8e5dc 33%, #e8e5dc 33.7%, transparent 34%),
+        linear-gradient(0deg, transparent 66.2%, #e8e5dc 66.5%, #e8e5dc 67.2%, transparent 67.5%),
+        #0a0c12;
+    box-shadow: 0 0 24px rgba(0, 204, 255, .12);
 }
 
 .game-cell {
     width: 100%;
+    min-width: 0;
     aspect-ratio: 1;
-    font-size: clamp(32px, 8vw, 56px);
-    font-weight: 900;
-    border: 2px solid #475569;
-    border-radius: 14px;
-    background: #1e293b;
-    transition: transform 150ms, border-color 150ms;
+    border: 0;
+    border-radius: 7px;
+    background: rgba(8, 10, 15, .25);
+    font-size: clamp(38px, 10vw, 72px);
+    font-weight: 1000;
+    text-shadow: 0 0 16px currentColor;
+    transition: transform 140ms ease, background 140ms ease;
 }
 
 .game-cell:not([disabled]):hover {
-    transform: translateY(-3px);
-    border-color: #67e8f9;
+    transform: scale(.94) rotate(-1deg);
+    background: rgba(255, 255, 255, .08);
 }
 
-.game-cell[disabled] {
-    opacity: 1 !important;
+.game-cell[disabled] { opacity: 1 !important; }
+.piece-x { color: #fa168c !important; }
+.piece-o { color: #00d9ff !important; }
+.winning-cell { background: rgba(255, 229, 46, .2) !important; }
+
+.player-badge {
+    padding: 10px 14px;
+    border: 1px solid currentColor;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, .04);
+    font-weight: 800;
 }
 
-.piece-x { color: #67e8f9 !important; }
-.piece-o { color: #f9a8d4 !important; }
-
-.winning-cell {
-    border-color: #facc15;
-    background: #3c3415;
+.action-button {
+    width: 100%;
+    font-weight: 900;
+    letter-spacing: .04em;
 }
 
-.victory-icon {
-    font-size: 72px;
-    animation: trophy-arrive 400ms ease-out;
+.winner-icon {
+    font-size: 76px;
+    filter: drop-shadow(0 0 18px rgba(255, 229, 46, .5));
+    animation: trophy-pop 420ms ease-out;
 }
 
-@keyframes trophy-arrive {
-    from { transform: scale(0.7); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
+@keyframes trophy-pop {
+    from { transform: scale(.65) rotate(-12deg); opacity: .2; }
+    to { transform: scale(1) rotate(0); opacity: 1; }
+}
+
+@media (max-width: 480px) {
+    .game-board { gap: 8px; padding: 8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .victory-icon { animation: none; }
-    .game-cell { transition: none; }
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
 """
 
 
 def show_game():
-    """Create independent game state for each page visit."""
+    """Build this browser session's screens and Classic game state."""
     game = ClassicGame()
     names = {"X": "Player 1", "O": "Player 2"}
 
@@ -102,137 +137,105 @@ def show_game():
     ui.add_css(PAGE_CSS)
 
     with ui.column().classes("arcade-shell items-center gap-5"):
-        ui.label("GRAFFITI GRID").classes("arcade-title")
-        ui.label("YOUR MOVE. YOUR MOMENT.").classes(
-            "text-sm tracking-widest text-gray-400 text-center"
-        )
         content = ui.column().classes("w-full items-center gap-5")
 
     def clear_screen():
-        """Replace the current screen without losing player names."""
+        """Remove the current screen before drawing the next one."""
         content.clear()
 
-    # Main menu.
     def show_menu():
+        """Show mode choices and the current local-play options."""
         clear_screen()
-
         with content:
             with ui.column().classes("arcade-panel items-center gap-4"):
-                ui.label("Choose your game").classes(
-                    "text-2xl font-bold"
+                ui.image("/assets/graffiti-grid.png").classes("menu-art")
+                ui.label("PICK YOUR MODE").classes("arcade-heading")
+                ui.label("Two players · one screen · one winner").classes(
+                    "text-center text-gray-300"
                 )
-                ui.label(
-                    "Challenge a friend on the same screen."
-                ).classes("text-gray-300 text-center")
-
                 ui.button(
                     "PLAY CLASSIC",
                     on_click=show_setup,
-                    color="cyan-8",
-                ).classes("w-full").props("size=lg")
-
-                ui.label(
-                    "Classic: three in a row wins. No turn timer."
-                ).classes("text-sm text-gray-400 text-center")
-
+                    color="pink-7",
+                ).classes(
+                    "action-button"
+                ).props("size=lg")
+                ui.label("Classic: take turns. Three in a row wins.").classes(
+                    "text-sm text-center text-gray-400"
+                )
                 ui.button(
                     "BLITZ · COMING NEXT",
                     color="grey-8",
-                ).classes("w-full").disable()
-
+                ).classes("action-button").disable()
                 ui.label(
-                    "Blitz: keep up to three pieces. "
-                    "Your fourth placement removes your oldest."
-                ).classes("text-sm text-gray-400 text-center")
+                    "Blitz: keep up to three pieces; "
+                    "your fourth removes your oldest."
+                ).classes("text-sm text-center text-gray-400")
+                ui.button("HOW TO PLAY", on_click=show_rules).props("flat")
+            ui.label("Local game is ready · Online rooms are planned").classes(
+                "text-xs text-gray-500 text-center"
+            )
 
-                ui.button(
-                    "How to play",
-                    on_click=show_rules,
-                ).props("flat")
-
-            ui.label(
-                "Local play available now · Online rooms coming later"
-            ).classes("text-sm text-gray-400 text-center")
-
-    # Instructions.
     def show_rules():
+        """Explain the playable Classic rules."""
         clear_screen()
-
         with content:
             with ui.column().classes("arcade-panel gap-4"):
-                ui.label("How to play Classic").classes(
-                    "text-2xl font-bold"
-                )
+                ui.label("HOW TO PLAY").classes("arcade-heading")
                 for rule in (
-                    "1. Enter a different name for each player.",
-                    "2. Player X goes first.",
-                    "3. Take turns choosing an empty square.",
-                    "4. Get three in a row, column, or diagonal to win.",
-                    "5. A full board with no winner is a draw.",
+                    "Player X starts; then players alternate turns.",
+                    "Choose any empty square. An occupied square cannot be reused.",
+                    "Three matching marks in a row, column, or diagonal win.",
+                    "A full board without a winner is a draw.",
+                    "Use Play Again to start a fresh round.",
                 ):
-                    ui.label(rule).classes("text-gray-300")
+                    ui.label(f"•  {rule}").classes("text-gray-200")
+                ui.button("BACK TO MENU", on_click=show_menu, color="pink-7")
 
-                ui.button("Back to menu", on_click=show_menu)
-
-    # Player names are display names, not account credentials.
     def show_setup():
+        """Collect clear display names before starting a round."""
         clear_screen()
-
         with content:
             with ui.column().classes("arcade-panel gap-4"):
-                ui.label("Meet the players").classes(
-                    "text-2xl font-bold"
+                ui.label("WHO’S PLAYING?").classes("arcade-heading")
+                ui.label("Choose a name for each side.").classes("text-gray-300")
+                name_x = (
+                    ui.input("Player X · pink", value=names["X"])
+                    .classes("w-full")
+                    .props("maxlength=20 outlined")
                 )
-                ui.label("Classic · Same-screen play").classes(
-                    "text-gray-400"
+                name_o = (
+                    ui.input("Player O · cyan", value=names["O"])
+                    .classes("w-full")
+                    .props("maxlength=20 outlined")
                 )
-
-                name_x = ui.input(
-                    "Player X name", value=names["X"]
-                ).classes("w-full").props("maxlength=20 outlined")
-
-                name_o = ui.input(
-                    "Player O name", value=names["O"]
-                ).classes("w-full").props("maxlength=20 outlined")
-
                 error = ui.label().classes("text-red-300")
                 error.props('role="alert"')
 
-                def start_game():
-                    # Validate names before changing game state.
+                def start_match():
                     first = (name_x.value or "").strip()
                     second = (name_o.value or "").strip()
-
                     if not first or not second:
                         error.set_text("Enter a name for both players.")
                         return
-
-                    if len(first) > 20 or len(second) > 20:
-                        error.set_text("Use 20 characters or fewer.")
-                        return
-
                     if first.casefold() == second.casefold():
-                        error.set_text(
-                            "Use different names so players are clear."
-                        )
+                        error.set_text("Choose two different names.")
                         return
-
                     names.update({"X": first, "O": second})
                     game.reset()
                     show_board()
 
                 ui.button(
                     "START MATCH",
-                    on_click=start_game,
-                    color="cyan-8",
-                ).classes("w-full").props("size=lg")
+                    on_click=start_match,
+                    color="pink-7",
+                ).classes(
+                    "action-button"
+                ).props("size=lg")
+                ui.button("BACK", on_click=show_menu).props("flat")
 
-                ui.button(
-                    "Back to menu", on_click=show_menu
-                ).props("flat")
-
-    # Board and result display.
     def show_board():
+        """Draw the board and update it after each accepted move."""
         clear_screen()
         buttons = []
 
@@ -249,54 +252,43 @@ def show_game():
 
         def refresh_board():
             winning_positions = set()
-
             if game.winner:
-                for line in game.WINNING_LINES:
-                    if all(
-                        game.board[index] == game.winner
-                        for index in line
-                    ):
-                        winning_positions.update(line)
+                winning_line = next(
+                    line
+                    for line in game.WINNING_LINES
+                    if all(game.board[index] == game.winner for index in line)
+                )
+                winning_positions.update(winning_line)
 
             for position, button in enumerate(buttons):
                 piece = game.board[position]
                 button.set_text(piece)
-                button.set_enabled(
-                    not game.finished and piece == ""
-                )
-                button.classes(
-                    remove="piece-x piece-o winning-cell"
-                )
-
+                button.set_enabled(not game.finished and piece == "")
+                button.classes(remove="piece-x piece-o winning-cell")
                 if piece:
                     button.classes(f"piece-{piece.lower()}")
                 if position in winning_positions:
                     button.classes("winning-cell")
-
                 row, column = divmod(position, 3)
                 button.props(
-                    f'aria-label="Row {row + 1}, '
-                    f'column {column + 1}"'
+                    f'aria-label="Row {row + 1}, column {column + 1}: '
+                    f'{piece or "empty"}"'
                 )
-                # Set text through NiceGUI instead of HTML interpolation.
-                button.set_text(piece)
 
             if game.winner:
                 winner = names[game.winner]
                 status.set_text(f"{winner} wins!")
-                result_icon.set_text("🏆")
                 result_title.set_text(f"{winner} takes the crown!")
-                result_detail.set_text("Three in a row. Well played.")
+                result_detail.set_text("Three in a row. Well played!")
+                result_icon.set_text("🏆")
             elif game.is_draw:
-                status.set_text("It's a draw!")
+                status.set_text("It’s a draw!")
+                result_title.set_text("A close match!")
+                result_detail.set_text("The board is full. Run it back?")
                 result_icon.set_text("🤝")
-                result_title.set_text("An even match")
-                result_detail.set_text(
-                    "The board is full. Ready for another round?"
-                )
             else:
                 player = game.current_player
-                status.set_text(f"{names[player]}'s turn · {player}")
+                status.set_text(f"{names[player]}’s turn · {player}")
 
             result.set_visibility(game.finished)
             leave_button.set_visibility(not game.finished)
@@ -304,52 +296,38 @@ def show_game():
 
         with content:
             ui.label("CLASSIC · LOCAL MATCH").classes(
-                "text-sm text-gray-400"
+                "text-xs tracking-widest text-gray-400"
             )
-
             with ui.row().classes("w-full justify-between gap-3"):
-                ui.label(f"X · {names['X']}").classes(
-                    "text-cyan-300 font-bold break-all"
-                )
-                ui.label(f"O · {names['O']}").classes(
-                    "text-pink-300 font-bold break-all"
-                )
+                ui.label(f'X  {names["X"]}').classes("player-badge piece-x break-all")
+                ui.label(f'O  {names["O"]}').classes("player-badge piece-o break-all")
 
-            status = ui.label().classes(
-                "text-2xl font-bold text-center break-all"
-            )
+            status = ui.label().classes("text-2xl font-black text-center break-all")
             status.props('role="status" aria-live="polite"')
 
             with ui.element("div").classes("game-board"):
                 for position in range(9):
-                    button = ui.button(
-                        "",
-                        on_click=partial(play_move, position),
-                        color=None,
-                    ).classes("game-cell")
-                    buttons.append(button)
+                    buttons.append(
+                        ui.button(
+                            "",
+                            on_click=partial(play_move, position),
+                            color=None,
+                        ).classes("game-cell")
+                    )
 
-            # Show the trophy only after a finished round.
-            with ui.column().classes(
-                "arcade-panel items-center gap-3"
-            ) as result:
-                result_icon = ui.label().classes("victory-icon")
+            with ui.column().classes("arcade-panel items-center gap-3") as result:
+                result_icon = ui.label().classes("winner-icon")
                 result_title = ui.label().classes(
-                    "text-2xl font-bold text-center break-all"
+                    "text-2xl font-black text-center break-all"
                 )
-                result_detail = ui.label().classes(
-                    "text-gray-300 text-center"
-                )
+                result_detail = ui.label().classes("text-gray-300 text-center")
                 ui.button(
                     "PLAY AGAIN",
                     on_click=play_again,
-                    color="cyan-8",
-                ).classes("w-full")
-                ui.button(
-                    "Main menu", on_click=show_menu
-                ).props("flat")
+                    color="pink-7",
+                ).classes("action-button")
+                ui.button("MAIN MENU", on_click=show_menu).props("flat")
 
-            # Confirm before leaving an unfinished round.
             leave_button = ui.button(
                 "Leave round",
                 on_click=lambda: leave_confirmation.set_visibility(True),
@@ -359,20 +337,14 @@ def show_game():
                 "arcade-panel items-center gap-3"
             ) as leave_confirmation:
                 ui.label(
-                    "Leave this round? Your board will be discarded."
+                    "Leave this round? The current board will be discarded."
                 ).classes("text-center")
                 with ui.row():
-                    ui.button("Leave", on_click=show_menu)
+                    ui.button("Leave", on_click=show_menu, color="pink-7")
                     ui.button(
                         "Keep playing",
-                        on_click=lambda: (
-                            leave_confirmation.set_visibility(False)
-                        ),
+                        on_click=lambda: leave_confirmation.set_visibility(False),
                     ).props("flat")
-
-            ui.label(
-                "Names last until refresh. X starts each local round."
-            ).classes("text-sm text-gray-400 text-center")
 
         refresh_board()
 

@@ -1,17 +1,19 @@
-"""Start the Graffiti Grid web application."""
+"""Start the Graffiti Grid NiceGUI application."""
 
-from nicegui import ui
+from nicegui import app, ui
 
 from game_screen import show_game
 
+# Make the project's public artwork available to the browser.
+app.add_static_files("/assets", "assets")
 
-# Build a separate game screen for each page visit.
+
 @ui.page("/")
 def home():
+    """Create a separate local game for each browser session."""
     show_game()
 
 
-# Run the application locally on this computer.
 if __name__ == "__main__":
     ui.run(
         title="Graffiti Grid",

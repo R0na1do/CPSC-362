@@ -36,12 +36,7 @@ class ClassicGame:
         self.board[cell] = self.current_player
 
         for a, b, c in self.WINNING_LINES:
-            if (
-                self.board[a]
-                == self.board[b]
-                == self.board[c]
-                == self.current_player
-            ):
+            if self.board[a] == self.board[b] == self.board[c] == self.current_player:
                 self.winner = self.current_player
                 return True, f"{self.winner} wins!"
 
@@ -49,7 +44,5 @@ class ClassicGame:
             self.is_draw = True
             return True, "The game is a draw."
 
-        self.current_player = (
-            "O" if self.current_player == "X" else "X"
-        )
+        self.current_player = "O" if self.current_player == "X" else "X"
         return True, f"{self.current_player}'s turn."
