@@ -257,15 +257,19 @@ class BlitzGameTests(unittest.TestCase):
         self.assertEqual(self.game.draw_reason, "repetition")
         self.assertTrue(self.game.finished)
 
-    def test_action_limit_ends_nonwinning_round_at_100(self):
-        """The 100th action draws unless that action already won."""
-        self.game.action_count = self.game.MAX_ACTIONS - 1
-        accepted, message = self.game.make_move(0)
+    def assert_action_limit_draw(self, accepted, message):
+        """Check that the 100th action ended the game in a draw."""
         self.assertTrue(accepted)
         self.assertIn("100 actions", message)
         self.assertEqual(self.game.action_count, 100)
         self.assertTrue(self.game.is_draw)
         self.assertEqual(self.game.draw_reason, "action_limit")
+
+    def test_action_limit_ends_nonwinning_round_at_100(self):
+        """The 100th action draws unless that action already won."""
+        self.game.action_count = self.game.MAX_ACTIONS - 1
+        accepted, message = self.game.make_move(0)
+        self.assert_action_limit_draw(accepted, message)
 
     def test_timeout_skips_turn_without_removing_or_placing_pieces(self):
         """A timeout advances the turn and preserves the board and queues."""
@@ -289,11 +293,7 @@ class BlitzGameTests(unittest.TestCase):
         """Timed-out turns count as actions and can end the round."""
         self.game.action_count = self.game.MAX_ACTIONS - 1
         accepted, message = self.game.skip_turn_for_timeout()
-        self.assertTrue(accepted)
-        self.assertIn("100 actions", message)
-        self.assertEqual(self.game.action_count, 100)
-        self.assertTrue(self.game.is_draw)
-        self.assertEqual(self.game.draw_reason, "action_limit")
+        self.assert_action_limit_draw(accepted, message)
 
     def test_reset_clears_rotation_and_repetition_history(self):
         """A rematch starts with empty queues and a fresh occurrence count."""
