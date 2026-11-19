@@ -1,8 +1,7 @@
 """Start the Graffiti Grid web application."""
 
-from nicegui import app, ui
-
 from game_screen import show_game
+from nicegui import app, ui
 
 app.add_static_files("/assets", "assets")
 
