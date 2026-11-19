@@ -242,7 +242,7 @@ class BlitzGameTests(unittest.TestCase):
         self.assertEqual(
             (self.game.board, self.game.action_count, self.game.current_player), before
         )
-        
+
     def test_third_occurrence_of_full_state_is_a_draw(self):
         """Legal moves keep the second occurrence playable and draw on the third."""
         self.play([0, 1, 2, 3, 4, 5])
@@ -271,7 +271,6 @@ class BlitzGameTests(unittest.TestCase):
         self.assertTrue(self.game.is_draw)
         self.assertEqual(self.game.draw_reason, "repetition")
         self.assertTrue(self.game.finished)
-
 
     def test_action_limit_ends_nonwinning_round_at_100(self):
         """The 100th action draws unless that action already won."""
