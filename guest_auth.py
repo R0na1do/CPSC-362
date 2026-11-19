@@ -93,7 +93,7 @@ def restore_guest(access_token, refresh_token):
 def session_credentials(session):
     """Extract only the tokens needed for private server-side persistence."""
     if session is None or not all(
-        isinstance(getattr(session, field, None), str) and getattr(session, field)
+        isinstance(getattr(session, field, None), str) and getattr(session, field).strip()
         for field in ("access_token", "refresh_token")
     ):
         raise GuestSignInError("Supabase did not return session recovery tokens.")
