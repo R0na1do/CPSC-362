@@ -5,9 +5,8 @@ from math import ceil
 from time import monotonic
 from typing import Any
 
-from nicegui import ui
-
 from game_engine import BlitzGame, ClassicGame
+from nicegui import ui
 
 PLAYER_COLORS = {
     "pink": {"name": "Neon Pink", "hex": "#ff35a8", "symbol": "🩷"},
